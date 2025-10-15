@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>品规数量分类汇总工具</title>
+    <style>
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+        font-family: Arial, sans-serif;
+      }
+      .container {
+        max-width: 800px;
+        margin: 30px auto;
+        padding: 0 20px 40px;
+        position: relative;
+      }
+      .section {
+        margin-bottom: 20px;
+        position: relative;
+      }
+      /* 水印样式 */
+      .watermark {
+        position: absolute;
+        right: 20px;
+        bottom: 20px;
+        font-size: 160px;
+        color: rgba(150, 150, 150, 0.2);
+        transform: rotate(-15deg);
+        pointer-events: none;
+        z-index: 99;
+      }
+      /* 功能选项组（序号+去零） */
+      .option-group {
+        margin: 10px 0;
+        display: flex;
+        align-items: center;
+        gap: 20px; /* 两个选项间距 */
+        position: relative;
+        z-index: 2;
+      }
+      .option-item {
+        display: flex;
+        align-items: center;
+      }
+      .option-item input {
+        margin-right: 8px;
+      }
+      label {
+        display: block;
+        margin-bottom: 8px;
+        font-weight: bold;
+        color: #333;
+        position: relative;
+        z-index: 2;
+      }
+      .option-item label {
+        display: inline;
+        font-weight: normal; /* 选项标签不加粗 */
+        margin-bottom: 0;
+      }
+      textarea {
+        width: 100%;
+        padding: 10px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        resize: vertical;
+        font-size: 14px;
+        line-height: 1.5;
+        position: relative;
+        z-index: 2;
+        background-color: white;
+      }
+      #inputText {
+        height: 300px;
+      }
+      #resultText {
+        height: 200px;
+        background-color: #f9f9f9;
+        cursor: text;
+      }
+      .btn-group {
+        margin: 10px 0;
+        position: relative;
+        z-index: 2;
+      }
+      button {
+        padding: 10px 20px;
+        margin-right: 10px;
+        border: none;
+        border-radius: 4px;
+        background-color: #007bff;
+        color: white;
+        font-size: 14px;
+        cursor: pointer;
+        transition: background-color 0.3s;
+      }
+      button:hover {
+        background-color: #0056b3;
+      }
+      #copyBtn {
+        background-color: #28a745;
+      }
+      #copyBtn:hover {
+        background-color: #218838;
+      }
+      #copyTwoColBtn {
+        background-color: #ffc107;
+        color: #333;
+      }
+      #copyTwoColBtn:hover {
+        background-color: #e0a800;
+      }
+      .tip {
+        margin-top: 10px;
+        font-size: 14px;
+        color: #666;
+        position: relative;
+        z-index: 2;
+      }
+      .error {
+        color: #dc3545;
+      }
+      .success {
+        color: #28a745;
+      }
+      /* 联系方式备注 */
+      .contact-info {
+        position: absolute;
+        right: 20px;
+        bottom: 10px;
+        font-size: 12px;
+        color: #666;
+        text-align: right;
+        z-index: 2;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <!-- 输入区域 -->
+      <div class="section">
+        <div class="watermark">sqyc_nxc</div>
+        <label for="inputText">输入原始数据（直接粘贴“品规+数量”行）：</label>
+        <textarea
+          id="inputText"
+          placeholder="示例格式（无需表头，直接粘贴数据）：
+白沙（软和天下）	0.8
+白沙(硬天天向上细支)	0.3
+白沙(硬天天向上细支)	1.8
+芙蓉王（硬）	11.8
+芙蓉王（硬）	20.8
+...
+（中文括号会自动转为英文括号）"
+        ></textarea>
+        <div class="tip">
+          提示：1. 每行格式为「品规 数量」（制表符分隔）；2.
+          无需输入表头，直接粘贴纯数据行；3. 中文括号“（）”自动转英文“()”
+        </div>
+      </div>
+
+      <!-- 功能选项组（序号列 + 去零行） -->
+      <div class="option-group">
+        <div class="option-item">
+          <input type="checkbox" id="addIndex" />
+          <label for="addIndex">导出时自动生成序号列</label>
+        </div>
+        <div class="option-item">
+          <input type="checkbox" id="removeZero" />
+          <label for="removeZero">去除汇总后数量为0的行</label>
+        </div>
+      </div>
+
+      <!-- 操作按钮 -->
+      <div class="btn-group">
+        <button id="summaryBtn">生成分类汇总</button>
+        <button id="copyBtn">复制汇总结果</button>
+        <button id="copyTwoColBtn">复制分两列结果</button>
+      </div>
+
+      <!-- 结果区域 -->
+      <div class="section">
+        <div class="watermark">sqyc_nxc</div>
+        <label for="resultText">分类汇总结果（可直接复制到Excel）：</label>
+        <textarea id="resultText" readonly></textarea>
+        <div id="message" class="tip"></div>
+      </div>
+
+      <!-- 联系方式备注 -->
+      <div class="contact-info">
+        短号：65048<br />
+        邮箱：1415055998@qq.com
+      </div>
+    </div>
+
+    <script>
+      // 中文括号转英文括号
+      function convertBrackets(str) {
+        return str.replace(/（/g, "(").replace(/）/g, ")");
+      }
+
+      // 生成汇总结果（支持序号列 + 去零行）
+      document
+        .getElementById("summaryBtn")
+        .addEventListener("click", function () {
+          const inputText = document.getElementById("inputText").value.trim();
+          const resultText = document.getElementById("resultText");
+          const message = document.getElementById("message");
+          const addIndex = document.getElementById("addIndex").checked; // 序号列开关
+          const removeZero = document.getElementById("removeZero").checked; // 去零行开关
+          const summaryData = {};
+          let validLineCount = 0;
+
+          // 初始化状态
+          resultText.value = "";
+          message.className = "tip";
+          message.textContent = "";
+
+          // 验证输入
+          if (!inputText) {
+            message.className = "tip error";
+            message.textContent =
+              "错误：请先粘贴或输入“品规+数量”格式的原始数据！";
+            return;
+          }
+
+          // 解析原始数据
+          const lines = inputText
+            .split("\n")
+            .filter((line) => line.trim() !== "");
+          for (let i = 0; i < lines.length; i++) {
+            const line = lines[i].trim();
+            const [rawBrand, quantityStr] = line
+              .split("\t")
+              .map((item) => item.trim());
+
+            // 格式校验
+            if (!rawBrand || !quantityStr) {
+              message.className = "tip error";
+              message.textContent = `错误：第${
+                i + 1
+              }行格式错误！请确保用制表符分隔“品规”和“数量”`;
+              resultText.value = "";
+              return;
+            }
+
+            // 括号转换 + 数量校验
+            const brand = convertBrackets(rawBrand);
+            const quantity = parseFloat(quantityStr);
+            if (isNaN(quantity)) {
+              message.className = "tip error";
+              message.textContent = `错误：第${
+                i + 1
+              }行“数量”不是有效数字（当前值：${quantityStr}）`;
+              resultText.value = "";
+              return;
+            }
+
+            // 累加数量（保留1位小数）
+            summaryData[brand] = summaryData[brand]
+              ? parseFloat((summaryData[brand] + quantity).toFixed(1))
+              : quantity;
+            validLineCount++;
+          }
+
+          // 1. 排序 + 去零行处理
+          let sortedData = Object.entries(summaryData).sort((a, b) =>
+            a[0].localeCompare(b[0])
+          );
+          const originalCount = sortedData.length; // 去零前总数量
+
+          if (removeZero) {
+            sortedData = sortedData.filter(
+              ([_, total]) => Math.abs(total) > 0.001
+            ); // 过滤零数量（兼容浮点误差）
+            if (sortedData.length === 0) {
+              message.className = "tip error";
+              message.textContent =
+                "错误：所有品规汇总后数量均为0，无有效数据可显示！";
+              return;
+            }
+          }
+
+          // 2. 生成结果文本
+          let result = "";
+          // 表头处理
+          if (addIndex) {
+            result += "序号	品规	总数量\n";
+          } else {
+            result += "品规	总数量\n";
+          }
+          // 数据行处理（序号连续）
+          sortedData.forEach(([brand, total], index) => {
+            if (addIndex) {
+              result += `${index + 1}\t${brand}\t${total}\n`; // 序号从1开始递增
+            } else {
+              result += `${brand}\t${total}\n`;
+            }
+          });
+
+          // 3. 显示结果 + 提示信息
+          resultText.value = result.trim();
+          let successMsg = `成功：处理${validLineCount}行有效数据，汇总${sortedData.length}个品规！`;
+          if (addIndex) successMsg += "（已生成序号列）";
+          if (removeZero)
+            successMsg += `（已去除${
+              originalCount - sortedData.length
+            }条数量为0的行）`;
+          message.className = "tip success";
+          message.textContent = successMsg;
+        });
+
+      // 复制原始汇总结果
+      document.getElementById("copyBtn").addEventListener("click", function () {
+        copyToClipboard(
+          "resultText",
+          "汇总结果已复制，打开Excel直接粘贴即可！"
+        );
+      });
+
+      // 复制分两列结果（自动适配去零行和序号列）
+      document
+        .getElementById("copyTwoColBtn")
+        .addEventListener("click", function () {
+          const resultText = document.getElementById("resultText");
+          const message = document.getElementById("message");
+          const addIndex = document.getElementById("addIndex").checked;
+          const removeZero = document.getElementById("removeZero").checked;
+
+          // 基础校验
+          if (!resultText.value.trim()) {
+            message.className = "tip error";
+            message.textContent = "错误：暂无汇总结果可分列，请先生成汇总！";
+            return;
+          }
+
+          // 解析汇总结果
+          const summaryLines = resultText.value
+            .split("\n")
+            .filter((line) => line.trim() !== "");
+          if (summaryLines.length <= 1) {
+            message.className = "tip error";
+            message.textContent = "错误：数据量不足，无法分两列！";
+            return;
+          }
+
+          // 拆分表头和数据行（已去零，直接使用）
+          const header = summaryLines[0];
+          const dataLines = summaryLines.slice(1);
+          const totalDataCount = dataLines.length;
+          const midIndex = Math.ceil(totalDataCount / 2);
+          const leftCol = dataLines.slice(0, midIndex);
+          const rightCol = dataLines.slice(midIndex);
+
+          // 拼接两列结果
+          let twoColResult = `${header}\t${header}\n`;
+          for (let i = 0; i < Math.max(leftCol.length, rightCol.length); i++) {
+            const leftLine = leftCol[i] || "";
+            const rightLine = rightCol[i] || "";
+            twoColResult += `${leftLine}\t${rightLine}\n`;
+          }
+
+          // 复制到剪贴板
+          const tempTextarea = document.createElement("textarea");
+          tempTextarea.value = twoColResult.trim();
+          document.body.appendChild(tempTextarea);
+          tempTextarea.select();
+          document.execCommand("copy");
+          document.body.removeChild(tempTextarea);
+
+          // 提示信息
+          let successMsg = `成功：已将${totalDataCount}条数据平均分两列复制`;
+          if (addIndex) successMsg += "（含序号列）";
+          if (removeZero) successMsg += "（已去除零数量行）";
+          successMsg += "，粘贴到Excel自动分栏！";
+          message.className = "tip success";
+          message.textContent = successMsg;
+        });
+
+      // 通用剪贴板函数
+      function copyToClipboard(textareaId, successMsg) {
+        const textarea = document.getElementById(textareaId);
+        const message = document.getElementById("message");
+
+        if (!textarea.value.trim()) {
+          message.className = "tip error";
+          message.textContent = "错误：暂无结果可复制，请先生成汇总！";
+          return;
+        }
+
+        try {
+          navigator.clipboard
+            .writeText(textarea.value)
+            .then(() => {
+              message.className = "tip success";
+              message.textContent = successMsg;
+            })
+            .catch(() => {
+              textarea.select();
+              document.execCommand("copy");
+              message.className = "tip success";
+              message.textContent = successMsg;
+            });
+        } catch (err) {
+          textarea.select();
+          document.execCommand("copy");
+          message.className = "tip success";
+          message.textContent = successMsg;
+        }
+      }
+    </script>
+  </body>
+</html>
